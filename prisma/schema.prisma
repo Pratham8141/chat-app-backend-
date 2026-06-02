@@ -1,0 +1,632 @@
+// Message-Hub Backend - Prisma Schema
+// Database: PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// USERS & PROFILES
+// ─────────────────────────────────────────
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  phone             String?   @unique
+  passwordHash      String?
+  supabaseId        String?   @unique
+  emailVerified     Boolean   @default(false)
+  phoneVerified     Boolean   @default(false)
+  fcmToken          String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  profile           Profile?
+  sessions          Session[]
+  refreshTokens     RefreshToken[]
+
+  sentMessages      Message[]         @relation("MessageSender")
+  messageReads      MessageRead[]
+  messageReactions  MessageReaction[]
+
+  chatMemberships   ChatMember[]
+  groupMemberships  GroupMember[]
+
+  stories           Story[]
+  storyViews        StoryView[]
+  storyReactions    StoryReaction[]
+
+  initiatedCalls    Call[]            @relation("CallInitiator")
+  receivedCalls     Call[]            @relation("CallReceiver")
+
+  communityMems     CommunityMember[]
+  notifications     Notification[]
+  media             Media[]
+
+  blockedByUsers    BlockedUser[]     @relation("BlockedByUser")
+  blockedUsers      BlockedUser[]     @relation("BlockingUser")
+  reportsSubmitted  Report[]          @relation("ReportSubmitter")
+  reportsReceived   Report[]          @relation("ReportTarget")
+
+  settings          UserSettings?
+
+  friendsAsA        Friendship[]      @relation("FriendshipA")
+  friendsAsB        Friendship[]      @relation("FriendshipB")
+
+  starredMessages   StarredMessage[]
+
+  @@map("users")
+}
+
+model Profile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name          String
+  username      String   @unique
+  bio           String?
+  website       String?
+  location      String?
+  avatarUrl     String?
+  coverColor    String   @default("#5B5FEF")
+  coverUrl      String?
+
+  online        Boolean  @default(false)
+  lastSeen      DateTime @default(now())
+
+  storiesCount  Int      @default(0)
+  friendsCount  Int      @default(0)
+  groupsCount   Int      @default(0)
+
+  joinDate      DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("profiles")
+}
+
+model Friendship {
+  id        String           @id @default(cuid())
+  userAId   String
+  userBId   String
+  status    FriendshipStatus @default(PENDING)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  userA     User @relation("FriendshipA", fields: [userAId], references: [id])
+  userB     User @relation("FriendshipB", fields: [userBId], references: [id])
+
+  @@unique([userAId, userBId])
+  @@map("friendships")
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+// ─────────────────────────────────────────
+// AUTH
+// ─────────────────────────────────────────
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceInfo   String?
+  ipAddress    String?
+  userAgent    String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+  lastActiveAt DateTime @default(now())
+
+  @@map("sessions")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  isRevoked Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────
+// CHATS & MESSAGES
+// ─────────────────────────────────────────
+
+model Chat {
+  id          String     @id @default(cuid())
+  type        ChatType   @default(DIRECT)
+  name        String?
+  description String?
+  avatarUrl   String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  members     ChatMember[]
+  messages    Message[]
+
+  @@map("chats")
+}
+
+enum ChatType {
+  DIRECT
+  GROUP
+}
+
+model ChatMember {
+  id         String    @id @default(cuid())
+  chatId     String
+  chat       Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  pinned     Boolean   @default(false)
+  muted      Boolean   @default(false)
+  archived   Boolean   @default(false)
+  isAdmin    Boolean   @default(false)
+  unreadCount Int      @default(0)
+
+  joinedAt   DateTime  @default(now())
+  leftAt     DateTime?
+  lastReadAt DateTime?
+
+  @@unique([chatId, userId])
+  @@map("chat_members")
+}
+
+model Message {
+  id          String        @id @default(cuid())
+  chatId      String
+  chat        Chat          @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      User          @relation("MessageSender", fields: [senderId], references: [id])
+
+  content     String?
+  type        MessageType   @default(TEXT)
+  mediaUrl    String?
+  fileName    String?
+  fileSize    Int?
+  mimeType    String?
+  duration    Int?          // seconds for audio/video
+  thumbnailUrl String?
+
+  replyToId   String?
+  replyTo     Message?      @relation("MessageReply", fields: [replyToId], references: [id])
+  replies     Message[]     @relation("MessageReply")
+
+  deleted     Boolean       @default(false)
+  edited      Boolean       @default(false)
+  editedAt    DateTime?
+
+  forwardedFromId String?
+  forwardedFrom   Message?  @relation("MessageForward", fields: [forwardedFromId], references: [id])
+  forwards        Message[] @relation("MessageForward")
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  reactions   MessageReaction[]
+  reads       MessageRead[]
+  starred     StarredMessage[]
+
+  @@map("messages")
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  VOICE_NOTE
+  FILE
+  GIF
+  STICKER
+  LOCATION
+  CONTACT
+  POLL
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@map("message_reactions")
+}
+
+model MessageRead {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt    DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@map("message_reads")
+}
+
+model StarredMessage {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  starredAt DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@map("starred_messages")
+}
+
+// ─────────────────────────────────────────
+// GROUPS (extended from Chat)
+// ─────────────────────────────────────────
+
+model Group {
+  id           String        @id @default(cuid())
+  chatId       String        @unique
+  name         String
+  description  String?
+  avatarUrl    String?
+  inviteCode   String?       @unique
+  maxMembers   Int           @default(256)
+  createdById  String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  members      GroupMember[]
+  media        Media[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id          String      @id @default(cuid())
+  groupId     String
+  group       Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        GroupRole   @default(MEMBER)
+  addedById   String?
+  joinedAt    DateTime    @default(now())
+  leftAt      DateTime?
+
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+enum GroupRole {
+  MEMBER
+  ADMIN
+  OWNER
+}
+
+// ─────────────────────────────────────────
+// STORIES
+// ─────────────────────────────────────────
+
+model Story {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaUrl    String
+  mediaType   StoryMediaType  @default(IMAGE)
+  caption     String?
+  duration    Int             @default(5000)  // ms
+  expiresAt   DateTime
+  createdAt   DateTime        @default(now())
+
+  views       StoryView[]
+  reactions   StoryReaction[]
+
+  @@map("stories")
+}
+
+enum StoryMediaType {
+  IMAGE
+  VIDEO
+}
+
+model StoryView {
+  id        String   @id @default(cuid())
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  viewedAt  DateTime @default(now())
+
+  @@unique([storyId, userId])
+  @@map("story_views")
+}
+
+model StoryReaction {
+  id        String   @id @default(cuid())
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@unique([storyId, userId])
+  @@map("story_reactions")
+}
+
+// ─────────────────────────────────────────
+// CALLS
+// ─────────────────────────────────────────
+
+model Call {
+  id           String        @id @default(cuid())
+  initiatorId  String
+  initiator    User          @relation("CallInitiator", fields: [initiatorId], references: [id])
+  receiverId   String
+  receiver     User          @relation("CallReceiver", fields: [receiverId], references: [id])
+  type         CallType      @default(VOICE)
+  direction    CallDirection @default(OUTGOING)
+  status       CallStatus    @default(RINGING)
+  duration     Int           @default(0)   // seconds
+  startedAt    DateTime?
+  endedAt      DateTime?
+  createdAt    DateTime      @default(now())
+
+  @@map("calls")
+}
+
+enum CallType {
+  VOICE
+  VIDEO
+}
+
+enum CallDirection {
+  INCOMING
+  OUTGOING
+}
+
+enum CallStatus {
+  RINGING
+  ANSWERED
+  MISSED
+  REJECTED
+  ENDED
+}
+
+// ─────────────────────────────────────────
+// COMMUNITIES
+// ─────────────────────────────────────────
+
+model Community {
+  id            String            @id @default(cuid())
+  name          String
+  description   String?
+  bannerColor   String            @default("#5B5FEF")
+  iconColor     String            @default("#7C3AED")
+  avatarUrl     String?
+  category      String?
+  inviteCode    String?           @unique
+  createdById   String
+  memberCount   Int               @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  members       CommunityMember[]
+  channels      CommunityChannel[]
+  announcements CommunityAnnouncement[]
+
+  @@map("communities")
+}
+
+model CommunityMember {
+  id          String        @id @default(cuid())
+  communityId String
+  community   Community     @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        CommunityRole @default(MEMBER)
+  joinedAt    DateTime      @default(now())
+
+  @@unique([communityId, userId])
+  @@map("community_members")
+}
+
+enum CommunityRole {
+  MEMBER
+  MODERATOR
+  ADMIN
+  OWNER
+}
+
+model CommunityChannel {
+  id          String    @id @default(cuid())
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  isDefault   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@map("community_channels")
+}
+
+model CommunityAnnouncement {
+  id          String    @id @default(cuid())
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  content     String
+  authorId    String
+  createdAt   DateTime  @default(now())
+
+  @@map("community_announcements")
+}
+
+// ─────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────
+
+model Notification {
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       NotificationType
+  title      String
+  body       String?
+  data       Json?
+  read       Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  MESSAGE
+  STORY_VIEW
+  STORY_REACTION
+  MENTION
+  CALL_MISSED
+  FRIEND_REQUEST
+  GROUP_INVITE
+  COMMUNITY_INVITE
+  SYSTEM
+}
+
+// ─────────────────────────────────────────
+// MEDIA
+// ─────────────────────────────────────────
+
+model Media {
+  id          String     @id @default(cuid())
+  uploaderId  String
+  uploader    User       @relation(fields: [uploaderId], references: [id])
+  groupId     String?
+  group       Group?     @relation(fields: [groupId], references: [id])
+  url         String
+  storagePath String
+  type        MediaType
+  mimeType    String?
+  size        Int?
+  width       Int?
+  height      Int?
+  duration    Int?
+  thumbnail   String?
+  createdAt   DateTime   @default(now())
+
+  @@map("media")
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+  VOICE_NOTE
+  DOCUMENT
+  STICKER
+  GIF
+}
+
+// ─────────────────────────────────────────
+// PRIVACY & SAFETY
+// ─────────────────────────────────────────
+
+model BlockedUser {
+  id          String   @id @default(cuid())
+  blockerId   String
+  blocker     User     @relation("BlockingUser", fields: [blockerId], references: [id])
+  blockedId   String
+  blocked     User     @relation("BlockedByUser", fields: [blockedId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@map("blocked_users")
+}
+
+model Report {
+  id           String       @id @default(cuid())
+  reporterId   String
+  reporter     User         @relation("ReportSubmitter", fields: [reporterId], references: [id])
+  targetId     String
+  target       User         @relation("ReportTarget", fields: [targetId], references: [id])
+  reason       ReportReason
+  description  String?
+  status       ReportStatus @default(PENDING)
+  createdAt    DateTime     @default(now())
+  resolvedAt   DateTime?
+
+  @@map("reports")
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  INAPPROPRIATE_CONTENT
+  FAKE_ACCOUNT
+  VIOLENCE
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+// ─────────────────────────────────────────
+// SETTINGS
+// ─────────────────────────────────────────
+
+model UserSettings {
+  id                     String  @id @default(cuid())
+  userId                 String  @unique
+  user                   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Notifications
+  pushNotifications      Boolean @default(true)
+  messageNotifications   Boolean @default(true)
+  storyNotifications     Boolean @default(true)
+  mentionNotifications   Boolean @default(true)
+  callNotifications      Boolean @default(true)
+  notificationSound      Boolean @default(true)
+  notificationVibrate    Boolean @default(true)
+
+  // Privacy
+  lastSeenVisibility     PrivacyLevel @default(EVERYONE)
+  onlineStatusVisibility PrivacyLevel @default(EVERYONE)
+  readReceiptsEnabled    Boolean      @default(true)
+  profilePhotoVisibility PrivacyLevel @default(EVERYONE)
+  storyVisibility        PrivacyLevel @default(EVERYONE)
+
+  // App
+  theme                  String  @default("system")
+  language               String  @default("en")
+  fontSize               String  @default("medium")
+  mediaAutoDownload      Boolean @default(true)
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@map("user_settings")
+}
+
+enum PrivacyLevel {
+  EVERYONE
+  CONTACTS
+  NOBODY
+}
