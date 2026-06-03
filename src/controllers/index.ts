@@ -15,17 +15,27 @@ import * as notificationService from "../services/notification.service";
 // ─────────────────────────────────────────
 
 export const userController = {
-  async getProfile(req: AuthRequest, res: Response) {
-    const { userId } = req.params;
-    const profile = await userService.getProfileByUserId(userId, req.user!.id);
-    sendSuccess(res, profile);
-  },
+async getProfile(req: AuthRequest, res: Response) {
+  const userId = String(req.params.userId);
 
-  async getProfileByUsername(req: AuthRequest, res: Response) {
-    const { username } = req.params;
-    const profile = await userService.getProfileByUsername(username, req.user!.id);
-    sendSuccess(res, profile);
-  },
+  const profile = await userService.getProfileByUserId(
+    userId,
+    req.user!.id
+  );
+
+  sendSuccess(res, profile);
+},
+
+async getProfileByUsername(req: AuthRequest, res: Response) {
+  const username = String(req.params.username);
+
+  const profile = await userService.getProfileByUsername(
+    username,
+    req.user!.id
+  );
+
+  sendSuccess(res, profile);
+},
 
   async updateProfile(req: AuthRequest, res: Response) {
     const profile = await userService.updateProfile(req.user!.id, req.body);
@@ -48,7 +58,7 @@ export const userController = {
   },
 
   async unblockUser(req: AuthRequest, res: Response) {
-    await userService.unblockUser(req.user!.id, req.params.userId);
+    await userService.unblockUser(req.user!.id, String(req.params.userId));
     sendSuccess(res, null, "User unblocked");
   },
 
@@ -94,7 +104,7 @@ export const chatController = {
   },
 
   async getChatById(req: AuthRequest, res: Response) {
-    const chat = await chatService.getChatById(req.params.chatId, req.user!.id);
+    const chat = await chatService.getChatById(String(req.params.chatId), req.user!.id);
     sendSuccess(res, chat);
   },
 
@@ -119,7 +129,7 @@ export const chatController = {
 
   async updateChatMember(req: AuthRequest, res: Response) {
     const member = await chatService.updateChatMember(
-      req.params.chatId,
+      String(req.params.chatId),
       req.user!.id,
       req.body
     );
@@ -127,18 +137,18 @@ export const chatController = {
   },
 
   async leaveChat(req: AuthRequest, res: Response) {
-    await chatService.leaveChat(req.params.chatId, req.user!.id);
+    await chatService.leaveChat(String(req.params.chatId), req.user!.id);
     sendSuccess(res, null, "Left chat");
   },
 
   async markRead(req: AuthRequest, res: Response) {
-    await chatService.markChatRead(req.params.chatId, req.user!.id);
+    await chatService.markChatRead(String(req.params.chatId), req.user!.id);
     sendSuccess(res, null, "Marked as read");
   },
 
   async getSharedMedia(req: AuthRequest, res: Response) {
     const media = await mediaService.getChatSharedMedia(
-      req.params.chatId,
+      String(req.params.chatId),
       req.user!.id
     );
     sendSuccess(res, media);
@@ -151,7 +161,7 @@ export const chatController = {
 
 export const messageController = {
   async getMessages(req: AuthRequest, res: Response) {
-    const { chatId } = req.params;
+    const chatId = String(req.params.chatId);
     const { cursor, limit } = req.query as { cursor?: string; limit?: string };
     const result = await messageService.getMessages(
       chatId,
@@ -164,7 +174,7 @@ export const messageController = {
 
   async sendMessage(req: AuthRequest, res: Response) {
     const message = await messageService.sendMessage({
-      chatId: req.params.chatId,
+      chatId: String(req.params.chatId),
       senderId: req.user!.id,
       ...req.body,
     });
@@ -173,7 +183,7 @@ export const messageController = {
 
   async editMessage(req: AuthRequest, res: Response) {
     const message = await messageService.editMessage(
-      req.params.messageId,
+      String(req.params.messageId),
       req.user!.id,
       req.body.content
     );
@@ -181,13 +191,13 @@ export const messageController = {
   },
 
   async deleteMessage(req: AuthRequest, res: Response) {
-    await messageService.deleteMessage(req.params.messageId, req.user!.id);
+    await messageService.deleteMessage(String(req.params.messageId), req.user!.id);
     sendSuccess(res, null, "Message deleted");
   },
 
   async addReaction(req: AuthRequest, res: Response) {
     const reaction = await messageService.reactToMessage(
-      req.params.messageId,
+      String(req.params.messageId),
       req.user!.id,
       req.body.emoji
     );
@@ -195,14 +205,14 @@ export const messageController = {
   },
 
   async removeReaction(req: AuthRequest, res: Response) {
-    await messageService.removeReaction(req.params.messageId, req.user!.id);
+    await messageService.removeReaction(String(req.params.messageId), req.user!.id);
     sendSuccess(res, null, "Reaction removed");
   },
 
   async markRead(req: AuthRequest, res: Response) {
     const { messageIds } = req.body;
     await messageService.markMessagesRead(
-      req.params.chatId,
+      String(req.params.chatId),
       req.user!.id,
       messageIds
     );
@@ -211,7 +221,7 @@ export const messageController = {
 
   async forwardMessage(req: AuthRequest, res: Response) {
     const messages = await messageService.forwardMessage(
-      req.params.messageId,
+      String(req.params.messageId),
       req.user!.id,
       req.body.targetChatIds
     );
@@ -219,12 +229,12 @@ export const messageController = {
   },
 
   async starMessage(req: AuthRequest, res: Response) {
-    await messageService.starMessage(req.params.messageId, req.user!.id);
+    await messageService.starMessage(String(req.params.messageId), req.user!.id);
     sendSuccess(res, null, "Message starred");
   },
 
   async unstarMessage(req: AuthRequest, res: Response) {
-    await messageService.unstarMessage(req.params.messageId, req.user!.id);
+    await messageService.unstarMessage(String(req.params.messageId), req.user!.id);
     sendSuccess(res, null, "Message unstarred");
   },
 
@@ -262,13 +272,13 @@ export const storyController = {
   },
 
   async viewStory(req: AuthRequest, res: Response) {
-    await storyService.viewStory(req.params.storyId, req.user!.id);
+    await storyService.viewStory(String(req.params.storyId), req.user!.id);
     sendSuccess(res, null, "Viewed");
   },
 
   async reactToStory(req: AuthRequest, res: Response) {
     const reaction = await storyService.reactToStory(
-      req.params.storyId,
+      String(req.params.storyId),
       req.user!.id,
       req.body.emoji
     );
@@ -276,7 +286,7 @@ export const storyController = {
   },
 
   async deleteStory(req: AuthRequest, res: Response) {
-    await storyService.deleteStory(req.params.storyId, req.user!.id);
+    await storyService.deleteStory(String(req.params.storyId), req.user!.id);
     sendSuccess(res, null, "Story deleted");
   },
 };
@@ -310,7 +320,7 @@ export const mediaController = {
   },
 
   async deleteMedia(req: AuthRequest, res: Response) {
-    await mediaService.deleteMedia(req.params.mediaId, req.user!.id);
+    await mediaService.deleteMedia(String(req.params.mediaId), req.user!.id);
     sendSuccess(res, null, "Media deleted");
   },
 };
@@ -333,7 +343,7 @@ export const communityController = {
 
   async getById(req: AuthRequest, res: Response) {
     const community = await communityService.getCommunityById(
-      req.params.communityId,
+      String(req.params.communityId),
       req.user!.id
     );
     sendSuccess(res, community);
@@ -354,18 +364,18 @@ export const communityController = {
   },
 
   async join(req: AuthRequest, res: Response) {
-    await communityService.joinCommunity(req.params.communityId, req.user!.id);
+    await communityService.joinCommunity(String(req.params.communityId), req.user!.id);
     sendSuccess(res, null, "Joined community");
   },
 
   async leave(req: AuthRequest, res: Response) {
-    await communityService.leaveCommunity(req.params.communityId, req.user!.id);
+    await communityService.leaveCommunity(String(req.params.communityId), req.user!.id);
     sendSuccess(res, null, "Left community");
   },
 
   async createAnnouncement(req: AuthRequest, res: Response) {
     const ann = await communityService.createAnnouncement(
-      req.params.communityId,
+      String(req.params.communityId),
       req.user!.id,
       req.body.content
     );
@@ -388,12 +398,12 @@ export const callController = {
   },
 
   async answer(req: AuthRequest, res: Response) {
-    const call = await callService.answerCall(req.params.callId, req.user!.id);
+    const call = await callService.answerCall(String(req.params.callId), req.user!.id);
     sendSuccess(res, call, "Call answered");
   },
 
   async end(req: AuthRequest, res: Response) {
-    const call = await callService.endCall(req.params.callId, req.user!.id);
+    const call = await callService.endCall(String(req.params.callId), req.user!.id);
     sendSuccess(res, call, "Call ended");
   },
 

@@ -5,13 +5,16 @@ import * as groupService from "../services/group.service";
 
 export const groupController = {
   async getGroup(req: AuthRequest, res: Response) {
-    const group = await groupService.getGroup(req.params.chatId, req.user!.id);
+    const group = await groupService.getGroup(
+      String(String(req.params.chatId)),
+      req.user!.id
+    );
     sendSuccess(res, group);
   },
 
   async updateGroup(req: AuthRequest, res: Response) {
     const group = await groupService.updateGroup(
-      req.params.chatId,
+      String(String(req.params.chatId)),
       req.user!.id,
       req.body
     );
@@ -20,7 +23,7 @@ export const groupController = {
 
   async addMembers(req: AuthRequest, res: Response) {
     await groupService.addMembers(
-      req.params.chatId,
+      String(String(req.params.chatId)),
       req.user!.id,
       req.body.userIds
     );
@@ -29,18 +32,18 @@ export const groupController = {
 
   async removeMember(req: AuthRequest, res: Response) {
     await groupService.removeMember(
-      req.params.chatId,
+      String(String(req.params.chatId)),
       req.user!.id,
-      req.params.userId
+      String(String(req.params.userId))
     );
     sendSuccess(res, null, "Member removed");
   },
 
   async updateMemberRole(req: AuthRequest, res: Response) {
     await groupService.updateMemberRole(
-      req.params.chatId,
+      String(String(req.params.chatId)),
       req.user!.id,
-      req.params.userId,
+      String(String(req.params.userId)),
       req.body.role
     );
     sendSuccess(res, null, "Role updated");
@@ -48,7 +51,7 @@ export const groupController = {
 
   async generateInvite(req: AuthRequest, res: Response) {
     const group = await groupService.generateInviteCode(
-      req.params.chatId,
+      String(String(req.params.chatId)),
       req.user!.id
     );
     sendSuccess(res, { inviteCode: group.inviteCode });
@@ -56,7 +59,7 @@ export const groupController = {
 
   async joinByInvite(req: AuthRequest, res: Response) {
     const group = await groupService.joinByInviteCode(
-      req.params.code,
+      String(String(req.params.code)),
       req.user!.id
     );
     sendSuccess(res, group, "Joined group");
